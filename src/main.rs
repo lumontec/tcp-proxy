@@ -3,12 +3,21 @@ use tokio::io;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::select;
+use socket2::SockRef;
+
+const TCP_USER_TIMEOUT: u64 = 900;
 
 async fn proxy(client: &str, server: &str) -> io::Result<()> {
     let listener = TcpListener::bind(client).await?;
     loop {
         let (client, _) = listener.accept().await?;
         let server = TcpStream::connect(server).await?;
+
+        // set TCP_USER_TIMEOUT to tolerate 15 mins of dropped datagrams
+        let sref = SockRef::from(&server);
+        let cref = SockRef::from(&client);
+        sref.set_tcp_user_timeout(Some(std::time::Duration::from_secs(TCP_USER_TIMEOUT)))?;
+        cref.set_tcp_user_timeout(Some(std::time::Duration::from_secs(TCP_USER_TIMEOUT)))?;
 
         let (mut eread, mut ewrite) = client.into_split();
         let (mut oread, mut owrite) = server.into_split();
